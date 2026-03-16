@@ -10,9 +10,22 @@ import axiosInstance from "./axiosinstance";
 
 const UserContext = createContext();
 
+// Build a user object from a Firebase user (works without backend)
+const buildFirebaseUser = (firebaseUser) => ({
+  name: firebaseUser.displayName,
+  email: firebaseUser.email,
+  image: firebaseUser.photoURL || "https://github.com/shadcn.png",
+  _firebaseUid: firebaseUser.uid,
+  // Backend fields will be added when sync completes
+  _id: null,
+  isPremium: false,
+  channelname: null,
+});
+
 export const UserProvider = ({ children }) => {
-  // Restore user from localStorage IMMEDIATELY on mount (before any async ops)
+  // Immediately restore from localStorage —  no flash of "Sign In"
   const [user, setUser] = useState(() => {
+    if (typeof window === "undefined") return null;
     try {
       const saved = localStorage.getItem("user");
       return saved ? JSON.parse(saved) : null;
@@ -24,20 +37,21 @@ export const UserProvider = ({ children }) => {
 
   const login = (userdata) => {
     setUser(userdata);
-    localStorage.setItem("user", JSON.stringify(userdata));
+    try {
+      localStorage.setItem("user", JSON.stringify(userdata));
+    } catch {}
   };
 
   const logout = async () => {
     setUser(null);
-    localStorage.removeItem("user");
     try {
+      localStorage.removeItem("user");
       await signOut(auth);
     } catch (error) {
       console.error("Sign out error:", error);
     }
   };
 
-  // Called when user clicks "Sign In" — redirects to Google
   const handlegooglesignin = async () => {
     try {
       await signInWithRedirect(auth, provider);
@@ -46,22 +60,25 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // Helper: sync Firebase user to our backend and update app state
-  const syncUserWithBackend = async (firebaseuser) => {
+  // Try to sync Firebase user with our MongoDB backend.
+  // On success: update user state with full backend data.
+  // On failure: user is already set from Firebase — no logout, just log.
+  const syncWithBackend = async (firebaseUser) => {
     try {
       const payload = {
-        email: firebaseuser.email,
-        name: firebaseuser.displayName,
-        image: firebaseuser.photoURL || "https://github.com/shadcn.png",
+        email: firebaseUser.email,
+        name: firebaseUser.displayName,
+        image: firebaseUser.photoURL || "https://github.com/shadcn.png",
       };
       const response = await axiosInstance.post("/user/login", payload);
       if (response?.data?.result) {
         login(response.data.result);
       }
-    } catch (error) {
-      // Backend call failed — keep existing localStorage session if it exists
-      // Do NOT logout here; user may still be authenticated from a previous session
-      console.error("Backend sync error (non-fatal):", error?.message);
+    } catch (err) {
+      console.warn(
+        "Backend sync failed (non-fatal — using Firebase data):",
+        err?.message
+      );
     }
   };
 
@@ -69,47 +86,69 @@ export const UserProvider = ({ children }) => {
     let mounted = true;
 
     const init = async () => {
-      // Step 1: Check if we're returning from a Google redirect
+      // ── Step 1: Handle redirect result (fires once after Google redirect) ──
       try {
         const result = await getRedirectResult(auth);
         if (result?.user && mounted) {
-          await syncUserWithBackend(result.user);
+          // IMMEDIATELY set user from Firebase data so Sign In button vanishes
+          const firebaseUser = result.user;
+          const immediateUser = buildFirebaseUser(firebaseUser);
+          login(immediateUser);
+
+          // Then sync with backend in the background (updates _id, isPremium etc.)
+          syncWithBackend(firebaseUser);
         }
-      } catch (error) {
-        // This can throw auth/unauthorized-domain for preview URLs — not fatal
-        if (error?.code !== "auth/unauthorized-domain") {
-          console.error("getRedirectResult error:", error);
+      } catch (err) {
+        // auth/unauthorized-domain = preview URL used, not fatal
+        if (err?.code !== "auth/unauthorized-domain") {
+          console.error("getRedirectResult error:", err);
         }
       }
 
-      // Step 2: Listen for ongoing Firebase auth state changes
-      const unsubscribe = onAuthStateChanged(auth, async (firebaseuser) => {
+      // ── Step 2: Firebase auth state observer ──
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         if (!mounted) return;
 
-        if (firebaseuser) {
-          // Only call backend if we don't already have a user in state
-          // (avoids double-calling every page load)
-          const currentUser = localStorage.getItem("user");
-          if (!currentUser) {
-            await syncUserWithBackend(firebaseuser);
+        if (firebaseUser) {
+          // User is authenticated in Firebase
+          const savedUser = (() => {
+            try {
+              const s = localStorage.getItem("user");
+              return s ? JSON.parse(s) : null;
+            } catch {
+              return null;
+            }
+          })();
+
+          if (!savedUser) {
+            // No saved session — set from Firebase immediately, sync in background
+            login(buildFirebaseUser(firebaseUser));
+            syncWithBackend(firebaseUser);
+          }
+          // If savedUser exists, keep it (already restored in useState initializer)
+        } else {
+          // Firebase says no user — only clear if there's no localStorage user
+          // (protects against race conditions mid-redirect)
+          const hasLocal = !!localStorage.getItem("user");
+          if (!hasLocal) {
+            setUser(null);
           }
         }
-        // Note: we do NOT clear user state when firebaseuser is null
-        // because that could be a race condition during redirect
+
         setAuthLoading(false);
       });
 
       return unsubscribe;
     };
 
-    let cleanup = () => {};
-    init().then((unsub) => {
-      if (unsub) cleanup = unsub;
+    let unsubFn = () => {};
+    init().then((fn) => {
+      if (fn) unsubFn = fn;
     });
 
     return () => {
       mounted = false;
-      cleanup();
+      unsubFn();
     };
   }, []);
 

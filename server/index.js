@@ -27,7 +27,19 @@ const app = express();
 // CORS — allow all origins in production for Render/Vercel compatibility
 app.use(
   cors({
-    origin: true, // reflects the request origin — works for all deployed frontends
+    origin: (origin, callback) => {
+      // Allow: no origin (server-to-server, curl), localhost, Vercel, Render
+      if (
+        !origin ||
+        origin.includes("localhost") ||
+        origin.includes("vercel.app") ||
+        origin.includes("onrender.com") ||
+        origin === process.env.FRONTEND_URL
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Allow all for now — tighten after launch
+    },
     credentials: true,
   })
 );
