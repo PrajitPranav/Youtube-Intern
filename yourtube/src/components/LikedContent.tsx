@@ -19,6 +19,7 @@ export default function LikedVideosContent() {
   const [likedVideos, setLikedVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useUser();
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
   useEffect(() => {
     if (user) {
@@ -76,7 +77,6 @@ export default function LikedVideosContent() {
       </div>
     );
   }
-  const videos = "/video/vdo.mp4";
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -90,30 +90,32 @@ export default function LikedVideosContent() {
       <div className="space-y-4">
         {likedVideos.map((item) => (
           <div key={item._id} className="flex gap-4 group">
-            <Link href={`/watch/${item.videoid._id}`} className="flex-shrink-0">
+            <Link href={`/watch/${item?.videoid?._id || ""}`} className="flex-shrink-0">
               <div className="relative w-40 aspect-video bg-gray-100 rounded overflow-hidden">
                 <video
-                  src={`${process.env.BACKEND_URL}/${item.videoid?.filepath}`}
+                  src={`${backendUrl}/${item?.videoid?.filepath || ""}`}
                   className="object-cover group-hover:scale-105 transition-transform duration-200"
                 />
               </div>
             </Link>
 
             <div className="flex-1 min-w-0">
-              <Link href={`/watch/${item.videoid._id}`}>
+              <Link href={`/watch/${item?.videoid?._id || ""}`}>
                 <h3 className="font-medium text-sm line-clamp-2 group-hover:text-blue-600 mb-1">
-                  {item.videoid.videotitle}
+                  {item?.videoid?.videotitle || "Untitled video"}
                 </h3>
               </Link>
               <p className="text-sm text-gray-600">
-                {item.videoid.videochanel}
+                {item?.videoid?.videochanel || "Unknown channel"}
               </p>
               <p className="text-sm text-gray-600">
-                {item.videoid.views.toLocaleString()} views •{" "}
-                {formatDistanceToNow(new Date(item.videoid.createdAt))} ago
+                {(item?.videoid?.views || 0).toLocaleString()} views •{" "}
+                {item?.videoid?.createdAt
+                  ? formatDistanceToNow(new Date(item.videoid.createdAt))
+                  : "recently"} ago
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Liked {formatDistanceToNow(new Date(item.createdAt))} ago
+                Liked {item?.createdAt ? formatDistanceToNow(new Date(item.createdAt)) : "recently"} ago
               </p>
             </div>
 
@@ -129,7 +131,7 @@ export default function LikedVideosContent() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onClick={() => handleUnlikeVideo(item.videoid._id, item._id)}
+                  onClick={() => handleUnlikeVideo(item?.videoid?._id || "", item._id)}
                 >
                   <X className="w-4 h-4 mr-2" />
                   Remove from liked videos

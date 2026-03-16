@@ -9,6 +9,8 @@ import likeroutes from "./routes/like.js";
 import watchlaterroutes from "./routes/watchlater.js";
 import historyrroutes from "./routes/history.js";
 import commentroutes from "./routes/comment.js";
+import downloadroutes from "./routes/download.js";
+import paymentroutes from "./routes/payment.js";
 dotenv.config();
 const app = express();
 import path from "path";
@@ -26,6 +28,8 @@ app.use("/like", likeroutes);
 app.use("/watch", watchlaterroutes);
 app.use("/history", historyrroutes);
 app.use("/comment", commentroutes);
+app.use("/download", downloadroutes);
+app.use("/payment", paymentroutes);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
@@ -33,11 +37,19 @@ app.listen(PORT, () => {
 });
 
 const DBURL = process.env.DB_URL;
-mongoose
-  .connect(DBURL)
-  .then(() => {
+
+const connectDB = async () => {
+  if (!DBURL) {
+    console.warn("DB_URL is not configured. MongoDB connection skipped.");
+    return;
+  }
+
+  try {
+    await mongoose.connect(DBURL);
     console.log("Mongodb connected");
-  })
-  .catch((error) => {
-    console.log(error);
-  });
+  } catch (error) {
+    console.error("MongoDB connection failed:", error?.message || error);
+  }
+};
+
+connectDB();
