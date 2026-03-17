@@ -1,7 +1,6 @@
 import {
   onAuthStateChanged,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   signOut,
 } from "firebase/auth";
 import { useState, useEffect, useContext, createContext } from "react";
@@ -10,20 +9,8 @@ import axiosInstance from "./axiosinstance";
 
 const UserContext = createContext();
 
-// Build a user object from a Firebase user (works without backend)
-const buildFirebaseUser = (firebaseUser) => ({
-  name: firebaseUser.displayName,
-  email: firebaseUser.email,
-  image: firebaseUser.photoURL || "https://github.com/shadcn.png",
-  _firebaseUid: firebaseUser.uid,
-  // Backend fields will be added when sync completes
-  _id: null,
-  isPremium: false,
-  channelname: null,
-});
-
 export const UserProvider = ({ children }) => {
-  // Immediately restore from localStorage —  no flash of "Sign In"
+  // Restore from localStorage immediately — no flash of "not logged in"
   const [user, setUser] = useState(() => {
     if (typeof window === "undefined") return null;
     try {
@@ -52,17 +39,7 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  const handlegooglesignin = async () => {
-    try {
-      await signInWithRedirect(auth, provider);
-    } catch (error) {
-      console.error("Redirect error:", error);
-    }
-  };
-
-  // Try to sync Firebase user with our MongoDB backend.
-  // On success: update user state with full backend data.
-  // On failure: user is already set from Firebase — no logout, just log.
+  // Sync Firebase user with backend — non-fatal if backend is slow/down
   const syncWithBackend = async (firebaseUser) => {
     try {
       const payload = {
@@ -72,84 +49,78 @@ export const UserProvider = ({ children }) => {
       };
       const response = await axiosInstance.post("/user/login", payload);
       if (response?.data?.result) {
-        login(response.data.result);
+        login(response.data.result); // Updates with full backend data (_id, channelname, etc.)
       }
     } catch (err) {
-      console.warn(
-        "Backend sync failed (non-fatal — using Firebase data):",
-        err?.message
-      );
+      console.warn("Backend sync failed (non-fatal):", err?.message);
+      // User stays logged in via Firebase data stored in localStorage
     }
   };
 
+  // POPUP-based sign in — works because domain is now authorized in Firebase
+  const handlegooglesignin = async () => {
+    try {
+      const result = await signInWithPopup(auth, provider);
+      if (result?.user) {
+        const firebaseUser = result.user;
+
+        // Immediately set user so Sign In button vanishes
+        const immediateUser = {
+          name: firebaseUser.displayName,
+          email: firebaseUser.email,
+          image: firebaseUser.photoURL || "https://github.com/shadcn.png",
+          _id: null,
+          isPremium: false,
+          channelname: null,
+        };
+        login(immediateUser);
+
+        // Sync with backend in background to get full user data
+        syncWithBackend(firebaseUser);
+      }
+    } catch (error) {
+      console.error("Sign-in error:", error?.code, error?.message);
+      if (error?.code === "auth/popup-blocked") {
+        alert(
+          "Popup was blocked by your browser. Please allow popups for this site and try again."
+        );
+      } else if (error?.code === "auth/unauthorized-domain") {
+        alert(
+          "This domain is not authorized. Please contact the administrator."
+        );
+      }
+    }
+  };
+
+  // Restore session on mount and keep listening for auth state changes
   useEffect(() => {
-    let mounted = true;
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // Firebase session exists — check if we have full backend data
+        const savedUser = (() => {
+          try {
+            const s = localStorage.getItem("user");
+            return s ? JSON.parse(s) : null;
+          } catch {
+            return null;
+          }
+        })();
 
-    const init = async () => {
-      // ── Step 1: Handle redirect result (fires once after Google redirect) ──
-      try {
-        const result = await getRedirectResult(auth);
-        if (result?.user && mounted) {
-          // IMMEDIATELY set user from Firebase data so Sign In button vanishes
-          const firebaseUser = result.user;
-          const immediateUser = buildFirebaseUser(firebaseUser);
-          login(immediateUser);
-
-          // Then sync with backend in the background (updates _id, isPremium etc.)
+        if (!savedUser || !savedUser._id) {
+          // No backend data yet — sync in background
           syncWithBackend(firebaseUser);
         }
-      } catch (err) {
-        // auth/unauthorized-domain = preview URL used, not fatal
-        if (err?.code !== "auth/unauthorized-domain") {
-          console.error("getRedirectResult error:", err);
+      } else {
+        // Firebase says no session — clear state only if no local data
+        const hasLocal = !!localStorage.getItem("user");
+        if (!hasLocal) {
+          setUser(null);
         }
       }
-
-      // ── Step 2: Firebase auth state observer ──
-      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        if (!mounted) return;
-
-        if (firebaseUser) {
-          // User is authenticated in Firebase
-          const savedUser = (() => {
-            try {
-              const s = localStorage.getItem("user");
-              return s ? JSON.parse(s) : null;
-            } catch {
-              return null;
-            }
-          })();
-
-          if (!savedUser) {
-            // No saved session — set from Firebase immediately, sync in background
-            login(buildFirebaseUser(firebaseUser));
-            syncWithBackend(firebaseUser);
-          }
-          // If savedUser exists, keep it (already restored in useState initializer)
-        } else {
-          // Firebase says no user — only clear if there's no localStorage user
-          // (protects against race conditions mid-redirect)
-          const hasLocal = !!localStorage.getItem("user");
-          if (!hasLocal) {
-            setUser(null);
-          }
-        }
-
-        setAuthLoading(false);
-      });
-
-      return unsubscribe;
-    };
-
-    let unsubFn = () => {};
-    init().then((fn) => {
-      if (fn) unsubFn = fn;
+      setAuthLoading(false);
     });
 
-    return () => {
-      mounted = false;
-      unsubFn();
-    };
+    return () => unsubscribe();
   }, []);
 
   return (
