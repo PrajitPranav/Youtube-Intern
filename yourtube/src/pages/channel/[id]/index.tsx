@@ -5,7 +5,7 @@ import VideoUploader from "@/components/VideoUploader";
 import DownloadsContent from "@/components/DownloadsContent";
 import { useUser } from "@/lib/AuthContext";
 import { useRouter } from "next/router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axiosInstance from "@/lib/axiosinstance";
 import { Button } from "@/components/ui/button";
 import { Crown } from "lucide-react";
@@ -16,41 +16,65 @@ declare global {
   }
 }
 
-const index = () => {
+const ChannelPage = () => {
   const router = useRouter();
   const { id } = router.query;
   const { user, login } = useUser();
   const [activeTab, setActiveTab] = useState("videos");
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [channelData, setChannelData] = useState<any>(null);
+  const [channelVideos, setChannelVideos] = useState<any[]>([]);
+  const [videosLoading, setVideosLoading] = useState(true);
 
-  const videos = [
-    {
-      _id: "1",
-      videotitle: "Amazing Nature Documentary",
-      filename: "nature-doc.mp4",
-      filetype: "video/mp4",
-      filepath: "/videos/nature-doc.mp4",
-      filesize: "500MB",
-      videochanel: "Nature Channel",
-      Like: 1250,
-      views: 45000,
-      uploader: "nature_lover",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      _id: "2",
-      videotitle: "Cooking Tutorial: Perfect Pasta",
-      filename: "pasta-tutorial.mp4",
-      filetype: "video/mp4",
-      filepath: "/videos/pasta-tutorial.mp4",
-      filesize: "300MB",
-      videochanel: "Chef's Kitchen",
-      Like: 890,
-      views: 23000,
-      uploader: "chef_master",
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-  ];
+  // Determine the channel to display — use URL id if available, else fall back to logged-in user
+  const channelId = id || user?._id;
+  const isOwnChannel = user && (channelId === user._id || channelId === id);
+
+  // Fetch channel user data from backend
+  useEffect(() => {
+    if (!channelId) return;
+    const fetchChannel = async () => {
+      try {
+        const res = await axiosInstance.get(`/user/${channelId}`);
+        setChannelData(res.data);
+      } catch {
+        // Fallback to auth context user data
+        setChannelData(user);
+      }
+    };
+    fetchChannel();
+  }, [channelId]);
+
+  // Fetch all videos and filter by uploader
+  useEffect(() => {
+    const fetchVideos = async () => {
+      setVideosLoading(true);
+      try {
+        const res = await axiosInstance.get("/video/getall");
+        const all: any[] = Array.isArray(res.data) ? res.data : [];
+        // Show videos uploaded by this channel (matched by uploader email or channel name)
+        const channelName =
+          channelData?.channelname ||
+          channelData?.name ||
+          user?.channelname ||
+          user?.name;
+        const filtered = all.filter(
+          (v) =>
+            v.uploader === channelName ||
+            v.videochanel === channelName ||
+            v.videochanel === channelData?.channelname
+        );
+        setChannelVideos(filtered.length > 0 ? filtered : all);
+      } catch {
+        setChannelVideos([]);
+      } finally {
+        setVideosLoading(false);
+      }
+    };
+    fetchVideos();
+  }, [channelData]);
+
+  const displayChannel = channelData || user;
 
   const handleUpgradeToPremium = async () => {
     if (!user) {
@@ -65,9 +89,7 @@ const index = () => {
     try {
       const orderRes = await axiosInstance.post("/payment/create-order");
       const order = orderRes.data;
-
       const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-
       const options = {
         key: razorpayKey,
         amount: order.amount,
@@ -84,30 +106,17 @@ const index = () => {
               userId: user._id,
             });
             if (verifyRes.data?.success) {
-              // Update local user context with premium status
               login({ ...user, isPremium: true });
-              alert(
-                "🎉 You are now a Premium member! Enjoy unlimited downloads."
-              );
+              alert("🎉 You are now a Premium member! Enjoy unlimited downloads.");
             }
-          } catch (err) {
+          } catch {
             alert("Payment verification failed. Please contact support.");
           }
         },
-        prefill: {
-          name: user.name || "",
-          email: user.email || "",
-        },
-        theme: {
-          color: "#2563EB",
-        },
-        modal: {
-          ondismiss: () => {
-            setPaymentLoading(false);
-          },
-        },
+        prefill: { name: user.name || "", email: user.email || "" },
+        theme: { color: "#2563EB" },
+        modal: { ondismiss: () => setPaymentLoading(false) },
       };
-
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (error) {
@@ -118,72 +127,71 @@ const index = () => {
     }
   };
 
-  try {
-    let channel = user;
+  return (
+    <div className="flex-1 min-h-screen bg-white">
+      <div className="max-w-full mx-auto">
+        <ChannelHeader channel={displayChannel} user={user} />
 
-    return (
-      <div className="flex-1 min-h-screen bg-white">
-        <div className="max-w-full mx-auto">
-          <ChannelHeader channel={channel} user={user} />
-
-          {/* Premium upgrade banner — shown only if user exists and is not premium */}
-          {user && !user.isPremium && (
-            <div className="mx-4 my-3 flex items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg px-4 py-3">
-              <div className="flex items-center gap-3">
-                <Crown className="w-5 h-5 text-yellow-500" />
-                <div>
-                  <p className="text-sm font-medium text-gray-800">
-                    Upgrade to Premium
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Download unlimited videos for just ₹99
-                  </p>
-                </div>
+        {/* Premium upgrade banner */}
+        {user && !user.isPremium && (
+          <div className="mx-4 my-3 flex items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Crown className="w-5 h-5 text-yellow-500" />
+              <div>
+                <p className="text-sm font-medium text-gray-800">Upgrade to Premium</p>
+                <p className="text-xs text-gray-500">Download unlimited videos for just ₹99</p>
               </div>
-              <Button
-                size="sm"
-                onClick={handleUpgradeToPremium}
-                disabled={paymentLoading}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-xs px-4 py-2 rounded-full"
-              >
-                {paymentLoading ? "Processing..." : "Upgrade · ₹99"}
-              </Button>
             </div>
-          )}
+            <Button
+              size="sm"
+              onClick={handleUpgradeToPremium}
+              disabled={paymentLoading}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-xs px-4 py-2 rounded-full"
+            >
+              {paymentLoading ? "Processing..." : "Upgrade · ₹99"}
+            </Button>
+          </div>
+        )}
 
-          {/* Premium badge — shown when user is premium */}
-          {user && user.isPremium && (
-            <div className="mx-4 my-3 flex items-center gap-2 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-300 rounded-lg px-4 py-2 w-fit">
-              <Crown className="w-4 h-4 text-yellow-500" />
-              <p className="text-sm font-medium text-yellow-700">
-                Premium Member — Unlimited Downloads
-              </p>
-            </div>
-          )}
+        {/* Premium badge */}
+        {user && user.isPremium && (
+          <div className="mx-4 my-3 flex items-center gap-2 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-300 rounded-lg px-4 py-2 w-fit">
+            <Crown className="w-4 h-4 text-yellow-500" />
+            <p className="text-sm font-medium text-yellow-700">
+              Premium Member — Unlimited Downloads
+            </p>
+          </div>
+        )}
 
-          <Channeltabs activeTab={activeTab} onTabChange={setActiveTab} />
+        <Channeltabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-          {activeTab === "downloads" ? (
-            <div className="px-4 py-6">
-              <DownloadsContent />
-            </div>
-          ) : (
-            <>
+        {activeTab === "downloads" ? (
+          <div className="px-4 py-6">
+            <DownloadsContent />
+          </div>
+        ) : (
+          <>
+            {/* Only show uploader on own channel */}
+            {isOwnChannel && (
               <div className="px-4 pb-8">
-                <VideoUploader channelId={id} channelName={channel?.channelname} />
+                <VideoUploader
+                  channelId={channelId}
+                  channelName={displayChannel?.channelname || displayChannel?.name}
+                />
               </div>
-              <div className="px-4 pb-8">
-                <ChannelVideos videos={videos} />
-              </div>
-            </>
-          )}
-        </div>
+            )}
+            <div className="px-4 pb-8">
+              {videosLoading ? (
+                <div className="text-center py-8 text-gray-500">Loading videos...</div>
+              ) : (
+                <ChannelVideos videos={channelVideos} />
+              )}
+            </div>
+          </>
+        )}
       </div>
-    );
-  } catch (error) {
-    console.error("Error fetching channel data:", error);
-    return null;
-  }
+    </div>
+  );
 };
 
-export default index;
+export default ChannelPage;
