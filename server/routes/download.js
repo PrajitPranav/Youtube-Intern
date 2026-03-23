@@ -4,7 +4,6 @@ import User from "../Modals/Auth.js";
 
 const router = express.Router();
 
-// POST /download/:videoId/:userId — Record download and return file path
 router.post("/:videoId/:userId", async (req, res) => {
   try {
     const { videoId, userId } = req.params;
@@ -16,7 +15,6 @@ router.post("/:videoId/:userId", async (req, res) => {
 
     const today = new Date().toDateString();
 
-    // Free user limit: 1 download per day
     if (!user.isPremium) {
       if (user.lastDownloadDate === today && user.downloadCount >= 1) {
         return res
@@ -29,7 +27,6 @@ router.post("/:videoId/:userId", async (req, res) => {
       user.lastDownloadDate = today;
     }
 
-    // Record the download (avoid duplicates optional — allow re-download)
     user.downloads.push(videoId);
     await user.save();
 
@@ -40,7 +37,6 @@ router.post("/:videoId/:userId", async (req, res) => {
   }
 });
 
-// GET /download/:userId — Fetch all downloaded videos for a user
 router.get("/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -52,7 +48,6 @@ router.get("/:userId", async (req, res) => {
 
     if (!user) return res.status(404).json("User not found");
 
-    // Return unique downloads (deduplicate by _id)
     const seen = new Set();
     const uniqueDownloads = (user.downloads || []).filter((v) => {
       if (!v || seen.has(String(v._id))) return false;

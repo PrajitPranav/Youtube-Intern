@@ -10,7 +10,7 @@ import axiosInstance from "./axiosinstance";
 const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
-  // Restore from localStorage immediately — no flash of "not logged in"
+ 
   const [user, setUser] = useState(() => {
     if (typeof window === "undefined") return null;
     try {

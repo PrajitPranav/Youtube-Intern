@@ -5,7 +5,6 @@ import User from "../Modals/Auth.js";
 
 const router = express.Router();
 
-// POST /payment/create-order — Create a Razorpay order for premium upgrade
 router.post("/create-order", async (req, res) => {
   const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -13,7 +12,7 @@ router.post("/create-order", async (req, res) => {
   });
   try {
     const options = {
-      amount: 9900, // ₹99 in paise
+      amount: 9900, 
       currency: "INR",
       receipt: `premium_${Date.now()}`,
       notes: {
@@ -28,13 +27,11 @@ router.post("/create-order", async (req, res) => {
   }
 });
 
-// POST /payment/verify — Verify payment and upgrade user to premium
 router.post("/verify", async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId } =
       req.body;
 
-    // Verify signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_SECRET)
@@ -45,7 +42,6 @@ router.post("/verify", async (req, res) => {
       return res.status(400).json({ message: "Payment verification failed" });
     }
 
-    // Upgrade user to premium
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: { isPremium: true } },
