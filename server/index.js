@@ -16,7 +16,6 @@ import paymentroutes from "./routes/payment.js";
 
 dotenv.config();
 
-// Ensure uploads directory exists (Render ephemeral FS needs this)
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -24,11 +23,10 @@ if (!fs.existsSync(uploadsDir)) {
 
 const app = express();
 
-// CORS — allow all origins in production for Render/Vercel compatibility
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow: no origin (server-to-server, curl), localhost, Vercel, Render
+
       if (
         !origin ||
         origin.includes("localhost") ||
@@ -49,12 +47,10 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use("/uploads", express.static(uploadsDir));
 
-// Health check
 app.get("/", (req, res) => {
   res.send("YouTube backend is working");
 });
 
-// Routes
 app.use("/user", userroutes);
 app.use("/video", videoroutes);
 app.use("/like", likeroutes);
@@ -64,7 +60,6 @@ app.use("/comment", commentroutes);
 app.use("/download", downloadroutes);
 app.use("/payment", paymentroutes);
 
-// 404 catch-all
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.method} ${req.path} not found` });
 });

@@ -29,7 +29,6 @@ const ChannelPage = () => {
   const channelId = id || user?._id;
   const isOwnChannel = user && (channelId === user._id || channelId === id);
 
-
   useEffect(() => {
     if (!channelId) return;
     const fetchChannel = async () => {
@@ -37,7 +36,7 @@ const ChannelPage = () => {
         const res = await axiosInstance.get(`/user/${channelId}`);
         setChannelData(res.data);
       } catch {
-        
+
         setChannelData(user);
       }
     };
@@ -50,7 +49,7 @@ const ChannelPage = () => {
       try {
         const res = await axiosInstance.get("/video/getall");
         const all: any[] = Array.isArray(res.data) ? res.data : [];
-        // Show videos uploaded by this channel (matched by uploader email or channel name)
+
         const channelName =
           channelData?.channelname ||
           channelData?.name ||
@@ -130,7 +129,6 @@ const ChannelPage = () => {
       <div className="max-w-full mx-auto">
         <ChannelHeader channel={displayChannel} user={user} />
 
-      
         {user && !user.isPremium && (
           <div className="mx-4 my-3 flex items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg px-4 py-3">
             <div className="flex items-center gap-3">
@@ -151,7 +149,6 @@ const ChannelPage = () => {
           </div>
         )}
 
-    
         {user && user.isPremium && (
           <div className="mx-4 my-3 flex items-center gap-2 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-300 rounded-lg px-4 py-2 w-fit">
             <Crown className="w-4 h-4 text-yellow-500" />
@@ -169,7 +166,7 @@ const ChannelPage = () => {
           </div>
         ) : (
           <>
-         
+
             {isOwnChannel && (
               <div className="px-4 pb-8">
                 <VideoUploader

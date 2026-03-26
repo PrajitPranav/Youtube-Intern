@@ -75,7 +75,6 @@ export default function VideoCard({ video }: any) {
           : ""} ago
       </p>
 
-      
       <button
         onClick={handleDownload}
         className="mt-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"

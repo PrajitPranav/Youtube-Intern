@@ -10,7 +10,7 @@ import axiosInstance from "./axiosinstance";
 const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
- 
+
   const [user, setUser] = useState(() => {
     if (typeof window === "undefined") return null;
     try {
@@ -39,7 +39,6 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // Sync Firebase user with backend — non-fatal if backend is slow/down
   const syncWithBackend = async (firebaseUser) => {
     try {
       const payload = {
@@ -53,18 +52,16 @@ export const UserProvider = ({ children }) => {
       }
     } catch (err) {
       console.warn("Backend sync failed (non-fatal):", err?.message);
-      // User stays logged in via Firebase data stored in localStorage
+
     }
   };
 
-  // POPUP-based sign in — works because domain is now authorized in Firebase
   const handlegooglesignin = async () => {
     try {
       const result = await signInWithPopup(auth, provider);
       if (result?.user) {
         const firebaseUser = result.user;
 
-        // Immediately set user so Sign In button vanishes
         const immediateUser = {
           name: firebaseUser.displayName,
           email: firebaseUser.email,
@@ -75,7 +72,6 @@ export const UserProvider = ({ children }) => {
         };
         login(immediateUser);
 
-        // Sync with backend in background to get full user data
         syncWithBackend(firebaseUser);
       }
     } catch (error) {
@@ -92,11 +88,10 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // Restore session on mount and keep listening for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Firebase session exists — check if we have full backend data
+
         const savedUser = (() => {
           try {
             const s = localStorage.getItem("user");
@@ -107,11 +102,11 @@ export const UserProvider = ({ children }) => {
         })();
 
         if (!savedUser || !savedUser._id) {
-          // No backend data yet — sync in background
+
           syncWithBackend(firebaseUser);
         }
       } else {
-        // Firebase says no session — clear state only if no local data
+
         const hasLocal = !!localStorage.getItem("user");
         if (!hasLocal) {
           setUser(null);

@@ -20,14 +20,7 @@ const VideoInfo = ({ video }: any) => {
   const [isDisliked, setIsDisliked] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const { user } = useUser();
-  const [isWatchLater, setIsWatchLater] = useState(false);
-
-  // const user: any = {
-  //   id: "1",
-  //   name: "John Doe",
-  //   email: "john@example.com",
-  //   image: "https://github.com/shadcn.png?height=32&width=32",
-  // };
+  const [isWatchLater, setIsWatchLater] = useState(false);
   useEffect(() => {
     setlikes(video.Like || 0);
     setDislikes(video.Dislike || 0);
